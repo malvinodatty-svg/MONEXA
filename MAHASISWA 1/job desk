@@ -1,0 +1,16 @@
+
+1.	UX Research & User FlowPetakan alur pengguna dulu sebelum ngoding: Register/Login → Dashboard (saldo) → Top-Up → Transfer → Payment ke Merchant → Transaction History → Detail Transaksi. Gambar flow ini di Figma (gratis, kolaboratif) sebagai low-fidelity wireframe. Fokuskan pada 1 flow inti: user login, lihat saldo, transfer, cek history — ini yang akan didemo (R1-R9).
+
+2.	Wireframe & Mockup (Hi-Fi)Setelah flow oke, buat mockup visual di Figma: tentukan palet warna (misal biru/hijau untuk kesan finansial-trust), tipografi, dan komponen berulang (card saldo, tombol aksi, badge status SUCCESS/FAILED/PENDING, tabel transaksi). Referensi desain bisa cari 'fintech dashboard UI' di Dribbble/Mobbin untuk inspirasi, tapi jangan tiru mentah — buat versi sendiri.
+
+3.	Setup Project & ToolingInisialisasi project dengan `npm create vite@latest frontend -- --template react-ts` (React + TypeScript + Vite, lebih cepat dari Create React App). Install Tailwind CSS untuk styling, lalu install shadcn/ui untuk komponen siap pakai (button, modal, input, table) yang bisa di-custom warnanya sesuai mockup Figma. Setup ESLint + Prettier agar kode konsisten kalau nanti ada anggota lain yang bantu.
+
+4.	Bangun Struktur Routing & LayoutPakai React Router untuk halaman: /login, /register, /dashboard, /topup, /transfer, /payment, /history, /transaction/:id. Buat layout dasar dulu (Navbar + Sidebar + Content area) sebelum isi kontennya, supaya semua halaman konsisten. Buat juga ProtectedRoute component yang cek token JWT — user yang belum login otomatis diarahkan ke /login.
+
+5.	Implementasi Halaman Auth (R2, R3)Buat form Register & Login pakai React Hook Form + Zod untuk validasi (email valid, password minimal 8 karakter, konfirmasi password cocok). Setelah login sukses, simpan JWT (di memory/localStorage untuk prototype) dan simpan role user (USER/MERCHANT/ADMIN) untuk kontrol tampilan menu sesuai role.
+
+6.	Implementasi Dashboard, Top-Up, Transfer, Payment (R4-R7)Gunakan Axios sebagai HTTP client dan TanStack Query (React Query) untuk fetch & cache data saldo/transaksi — otomatis refresh setelah top-up/transfer berhasil tanpa reload manual. Setiap aksi (top-up/transfer/payment) tampilkan modal konfirmasi sebelum submit, lalu tampilkan status hasil transaksi (loading → success/failed) dengan jelas, karena ini yang paling sering dites dosen saat demo.
+
+7.	Transaction History & Detail (R8, R9)Buat tabel riwayat transaksi dengan filter sederhana (semua/top-up/transfer/payment) dan pagination jika datanya banyak. Klik satu transaksi membuka halaman/modal detail yang menampilkan transaction ID, timestamp, status, dan link ke digital receipt (dari object storage) sesuai R9 dan R11.
+
+8.	Polish UX & HandoffTambahkan loading skeleton, empty state ('belum ada transaksi'), pesan error yang jelas (misal 'saldo tidak cukup'), dan pastikan tampilan responsif di layar kecil. Terakhir, tes manual seluruh alur dari sisi frontend terhadap requirement R1-R9, lalu koordinasi dengan M2 (backend) dan M9 (QA) untuk integration testing sebelum demo.
