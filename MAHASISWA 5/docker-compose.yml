@@ -1,0 +1,125 @@
+# MONEXA / CloudWallet - Container stack (M5)
+# Jalankan : docker compose up -d --build
+# Akses    : http://localhost:${APP_PORT:-8080}
+#
+# Network:
+#   cloudwallet-edge    : proxy <-> frontend <-> backend
+#   cloudwallet-backend : backend <-> database <-> object-storage (tidak terjangkau dari proxy/frontend)
+
+name: cloudwallet
+
+services:
+  # ---------- Reverse proxy (satu-satunya pintu masuk aplikasi) ----------
+  cloudwallet-proxy:
+    image: nginx:1.27-alpine
+    container_name: cloudwallet-proxy
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - cloudwallet-frontend
+      - cloudwallet-backend
+    networks:
+      - cloudwallet-edge
+
+  # ---------- Frontend: React + Vite (M1) ----------
+  cloudwallet-frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_USE_MOCK: "false"
+    container_name: cloudwallet-frontend
+    restart: unless-stopped
+    networks:
+      - cloudwallet-edge
+
+  # ---------- Backend API: Node.js + Express (M2) ----------
+  cloudwallet-backend:
+    build: ./backend
+    container_name: cloudwallet-backend
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      DB_HOST: cloudwallet-database
+      DB_PORT: 3306
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      # disiapkan untuk fitur digital receipt (belum dipakai kode backend saat ini)
+      S3_ENDPOINT: http://cloudwallet-object-storage:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-receipts}
+    depends_on:
+      cloudwallet-database:
+        condition: service_healthy
+    networks:
+      - cloudwallet-edge
+      - cloudwallet-backend
+
+  # ---------- Database: MySQL 8.4 (M3) ----------
+  cloudwallet-database:
+    image: mysql:8.4
+    container_name: cloudwallet-database
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Jakarta
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - dbdata:/var/lib/mysql
+      # *.sql di folder ini dijalankan otomatis (urut nama) HANYA saat volume pertama kali dibuat
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # 127.0.0.1 (TCP) sengaja dipakai: server sementara saat init tidak membuka TCP,
+      # jadi healthy baru tercapai setelah schema.sql selesai dijalankan.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      - cloudwallet-backend
+    # Tidak ada "ports": database hanya bisa diakses dari dalam network
+
+  # ---------- Object storage S3-compatible untuk digital receipt ----------
+  cloudwallet-object-storage:
+    image: ${RUSTFS_IMAGE:-rustfs/rustfs:latest}
+    container_name: cloudwallet-object-storage
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "127.0.0.1:9001:9001"   # console admin, hanya bisa dibuka dari mesin host
+    volumes:
+      - objectdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      - cloudwallet-backend
+
+volumes:
+  dbdata:
+  objectdata:
+
+networks:
+  cloudwallet-edge:
+    name: cloudwallet-edge
+  cloudwallet-backend:
+    name: cloudwallet-backend
